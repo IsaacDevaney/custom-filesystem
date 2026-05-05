@@ -213,11 +213,13 @@ int allocate_file(int size, const char* name) {
         return -1;
     }
     int curr_block = block_alloc();
-    if (curr_block == -1) {
+    if (curr_block == BLOCK_FREE) {
         return -1;
     }
     inodes[inode].size = size;
     inodes[inode].first_block = curr_block;
+    inodes[inode].is_directory = 0;
+    inodes[inode].parent_inode = 0;
     block_set_next(curr_block, BLOCK_END);
     strcpy(inodes[inode].name, name);
     if (size>BLOCK_SIZE) {  // REQUIRES TESTS
@@ -227,7 +229,7 @@ int allocate_file(int size, const char* name) {
         while (allocated_size<size)
         {
             next_block = block_alloc();
-            if (next_block == -1) {
+            if (next_block == BLOCK_FREE) {
                 errno = 28;
                 return -1;
             }
