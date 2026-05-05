@@ -3,3 +3,5 @@ cmake-build-*/
 *.o
 *.out
 .idea/big.bin
+*.bin
+*.img
