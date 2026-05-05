@@ -46,6 +46,9 @@ void formatfs(){
     }
 
     createroot();
+    //TEMP TEST CODE BELOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    mymkdir("/root/", "docs");
+
 }
 
 void mysync(const char* target) {
@@ -621,6 +624,7 @@ int mymkdir(const char *path, const char* name) {
     int newdirfd = allocate_file(sizeof(struct mydirent), name);
     currdir->fds[currdir->size++] = newdirfd;
     inodes[newdirfd].is_directory = 1;
+    inodes[newdirfd].parent_inode = fd;
     struct mydirent* newdir = malloc(sizeof(struct mydirent));
     newdir->size = 0;
     for (size_t i = 0; i < MAX_DIR_SIZE; i++)
