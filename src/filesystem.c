@@ -187,9 +187,8 @@ int allocate_file(int size, const char* name) {
         errno = 28;
         return -1;
     }
-    int curr_block = find_empty_block();
+    int curr_block = block_alloc();
     if (curr_block == -1) {
-        errno = 28;
         return -1;
     }
     inodes[inode].size = size;
@@ -202,12 +201,12 @@ int allocate_file(int size, const char* name) {
         int next_block;
         while (allocated_size<size)
         {
-            next_block = find_empty_block();
+            next_block = block_alloc();
             if (next_block == -1) {
                 errno = 28;
                 return -1;
             }
-            disk_blocks[curr_block].next = next_block;
+            block_set_next(curr_block, next_block);
             curr_block = next_block;
             allocated_size+=BLOCK_SIZE;
         }
@@ -215,6 +214,66 @@ int allocate_file(int size, const char* name) {
     disk_blocks[curr_block].next = -2;
 
     return inode;
+}
+int block_alloc(void) {
+    int block = find_empty_block();
+
+    if (block == -1) {
+        errno = 28;
+        return -1;
+    }
+
+    disk_blocks[block].next = -2;
+    memset(disk_blocks[block].data, 0, BLOCK_SIZE);
+
+    return block;
+}
+
+void block_free_chain(int start_block) {
+    int block = start_block;
+
+    while (block != -1 && block != -2) {
+        int next = disk_blocks[block].next;
+
+        disk_blocks[block].next = -1;
+        memset(disk_blocks[block].data, 0, BLOCK_SIZE);
+
+        block = next;
+    }
+}
+
+int block_read(int block_id, char *buffer) {
+    if (block_id < 0 || block_id >= super_block.blocks || buffer == NULL) {
+        return -1;
+    }
+
+    memcpy(buffer, disk_blocks[block_id].data, BLOCK_SIZE);
+    return 0;
+}
+
+int block_write(int block_id, const char *buffer) {
+    if (block_id < 0 || block_id >= super_block.blocks || buffer == NULL) {
+        return -1;
+    }
+
+    memcpy(disk_blocks[block_id].data, buffer, BLOCK_SIZE);
+    return 0;
+}
+
+int block_next(int block_id) {
+    if (block_id < 0 || block_id >= super_block.blocks) {
+        return -1;
+    }
+
+    return disk_blocks[block_id].next;
+}
+
+void block_set_next(int block_id, int next_block) {
+    if (block_id < 0 || block_id >= super_block.blocks) {
+        return;
+    }
+
+    disk_blocks[block_id].next = next_block;
 }
 
 int find_empty_block() {
@@ -584,14 +643,7 @@ void removefilefs(char* fname) {
         return;
     }
 
-    int block = inodes[file_fd].next;
-    while (block != -1 && block != -2) {
-        int next = disk_blocks[block].next;
-        disk_blocks[block].next = -1;
-        memset(disk_blocks[block].data, 0, BLOCK_SIZE);
-        block = next;
-    }
-
+    block_free_chain(inodes[file_fd].next);
     inodes[file_fd].next = -1;
     inodes[file_fd].size = 0;
     inodes[file_fd].dir = 0;

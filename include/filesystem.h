@@ -13,7 +13,6 @@
 #define MAX_DIR_SIZE 10
 #define MAX_FILES 100
 #define O_CREAT 0100
-//extern unsigned char* myfsys;
 
 struct super_block {
     int inodes;
@@ -67,12 +66,19 @@ void printfd(int);
 int myopen(const char *pathname, int flags);
 int myclose(int myfd);
 //File system I/O
-//
+
 int mycreatefile(const char *path, const char* name);
 myDIR* myopendir(const char *name);
 struct mydirent *myreaddir(myDIR* dirp);
 int myclosedir(myDIR* dirp);
 int mymkdir(const char *path, const char* name);
-// print a single file from our fs with a given fd
+
+
+int block_alloc(void);
+void block_free_chain(int start_block);
+int block_read(int block_id, char *buffer);
+int block_write(int block_id, const char *buffer);
+int block_next(int block_id);
+void block_set_next(int block_id, int next_block);
 void printdir(const char*);
 #endif
