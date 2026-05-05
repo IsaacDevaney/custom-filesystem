@@ -1,0 +1,5 @@
+cmake-build-*/
+*.img
+*.o
+*.out
+.idea/
