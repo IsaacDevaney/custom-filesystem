@@ -61,7 +61,7 @@ void unmapfs();
 void formatfs();
 void loadfs(const char*);
 void lsfs(char* fname);
-void addfilefs(char* fname);
+void addfilefs(char* fname, char* target_dir);
 void removefilefs(char* fname);
 void extractfilefs(char* fname);
 void mysync(const char*);

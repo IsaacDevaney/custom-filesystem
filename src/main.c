@@ -33,13 +33,13 @@ int main(int argc, char** argv){
   char* toremove = NULL;
   char* toextract = NULL;
   char* fsname = NULL;
+  char* target_dir = NULL;
   int fd = -1;
   int newfs = 0;
   int filefsname = 0;
 
 
-
-  while ((opt = getopt(argc, argv, "lda:r:e:f:")) != -1) {
+  while ((opt = getopt(argc, argv, "lDa:r:e:f:d:")) != -1) {
     switch (opt) {
     case 'l':
       list = 1;
@@ -52,7 +52,7 @@ int main(int argc, char** argv){
       remove = 1;
       toremove = strdup(optarg);
       break;
-    case 'd':
+    case 'D':
       mydebug = 1;
       break;
     case 'f':
@@ -63,11 +63,13 @@ int main(int argc, char** argv){
       extract = 1;
       toextract = strdup(optarg);
       break;
+    case 'd':
+      target_dir = optarg;
+      break;
     default:
       exitusage(argv[0]);
     }
   }
-
 
   if (!filefsname){
     exitusage(argv[0]);
@@ -111,7 +113,7 @@ int main(int argc, char** argv){
   }
 
   if (add){
-    addfilefs(toadd);
+    addfilefs(toadd,target_dir);
     mysync(fsname);
   }
 
@@ -143,6 +145,6 @@ int zerosize(int fd){
 }
 
 void exitusage(char* pname){
-  fprintf(stderr, "Usage %s [-l] [-a path] [-e path] [-r path] -f name\n", pname);
+  fprintf(stderr, "Usage %s [-l] [-a path] [-e path] [-r path] [-d directory] [-D] -f name\n", pname);
   exit(EXIT_FAILURE);
 }

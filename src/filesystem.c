@@ -51,7 +51,7 @@ void formatfs(){
 }
 
 void mysync(const char* target) {
-    
+
     FILE *file;
     file = fopen(target, "w+");
     fwrite(&super_block, sizeof(struct super_block), 1, file);
@@ -377,6 +377,7 @@ void printfs_dsk(char* target) {
 }
 
 void lsfs(char* target){
+    //printdir("/root/docs/");
     printdir("/root/");
 }
 
@@ -640,25 +641,25 @@ int mymkdir(const char *path, const char* name) {
     return newdirfd;
 }
 
-void addfilefs(char* fname) {
-    char *dirc = strdup(fname);
+void addfilefs(char* fname, char* target_dir) {
     char *basec = strdup(fname);
 
-    if (dirc == NULL || basec == NULL) {
+    if (basec == NULL) {
         perror("strdup");
-        free(dirc);
-        free(basec);
         return;
     }
 
     char *bname = basename(basec);
-    char *dname = dirname(dirc);
 
-    printf("Adding directory: %s, file: %s\n", dname, bname);
+    const char *dir = ".";
+    if (target_dir != NULL && strlen(target_dir) > 0) {
+        dir = target_dir;
+    }
 
-    int fd = mycreatefile(dname, bname);
+    printf("Adding file: %s to directory: %s\n", bname, dir);
+
+    int fd = mycreatefile(dir, bname);
     if (fd == -1) {
-        free(dirc);
         free(basec);
         return;
     }
@@ -666,7 +667,6 @@ void addfilefs(char* fname) {
     FILE *src = fopen(fname, "rb");
     if (src == NULL) {
         perror("fopen");
-        free(dirc);
         free(basec);
         return;
     }
@@ -678,7 +678,6 @@ void addfilefs(char* fname) {
     }
 
     fclose(src);
-    free(dirc);
     free(basec);
 }
 
