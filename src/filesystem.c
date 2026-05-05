@@ -40,7 +40,7 @@ void formatfs(){
     for (size_t i = 0; i < super_block.blocks; i++)
     {
         strcpy(disk_blocks[i].data, "");
-        disk_blocks[i].next = -1;
+        disk_blocks[i].next = BLOCK_FREE;
     }
 
     createroot();
@@ -86,51 +86,48 @@ void createroot() {
 
 int myopen(const char *pathname, int flags)
 {
-    /**
-     * @brief Open a file at the given path.
-     * The opened file will be added into 'openfiles' struct array and this instance will be used to get the pointer of the file.
-     */
     char str[80];
     strcpy(str, pathname);
+
     char *token;
     const char s[2] = "/";
     token = strtok(str, s);
+
     char currpath[NAME_SIZE] = "";
     char lastpath[NAME_SIZE] = "";
-    while(token != NULL ) {
-        if (token != NULL) {
-            strcpy(lastpath, currpath);
-            strcpy(currpath, token);
-        }
+
+    while (token != NULL) {
+        strcpy(lastpath, currpath);
+        strcpy(currpath, token);
         token = strtok(NULL, s);
     }
-    for (size_t i = 0; i < super_block.inodes; i++)
-    {
+
+    for (size_t i = 0; i < super_block.inodes; i++) {
         if (!strcmp(inodes[i].name, currpath)) {
-            if (inodes[i].dir!=0) {
+            if (inodes[i].dir != 0) {
                 errno = 21;
                 return -1;
             }
-            openfiles[i].fd = i;
+
+            openfiles[i].fd = (int)i;
             openfiles[i].pos = 0;
-            return i;
+            return (int)i;
         }
     }
 
-    int i = mycreatefile(lastpath, currpath);
-    if (flags != O_CREAT)
-    {
+    if (flags != O_CREAT) {
         errno = 2;
         return -1;
     }
 
-    if (i == -1) {
+    int new_fd = mycreatefile(lastpath, currpath);
+    if (new_fd == -1) {
         return -1;
     }
 
-    openfiles[i].fd = i;
-    openfiles[i].pos = 0;
-    return i;
+    openfiles[new_fd].fd = new_fd;
+    openfiles[new_fd].pos = 0;
+    return new_fd;
 }
 
 int myclose(int myfd) {
@@ -152,9 +149,9 @@ void writebyte(int fd, int opos, char data) {
     int pos = opos;
     int rb = inodes[fd].next;
 
-    if (rb == -1) {
+   if (rb == BLOCK_FREE)  {
         rb = block_alloc();
-        if (rb == -1) {
+        if (rb == BLOCK_FREE) {
             printf("Error allocating first block\n");
             return;
         }
@@ -167,14 +164,14 @@ void writebyte(int fd, int opos, char data) {
 
         int next = block_next(rb);
 
-        if (next == -1) {
+        if (next == BLOCK_FREE) {
             printf("Error writing to freed block\n");
             return;
         }
 
-        if (next == -2) {
+        if (next == BLOCK_END) {
             int new_block = block_alloc();
-            if (new_block == -1) {
+            if (new_block == BLOCK_FREE) {
                 printf("Error allocating new block\n");
                 return;
             }
@@ -186,7 +183,10 @@ void writebyte(int fd, int opos, char data) {
         }
     }
 
-    disk_blocks[rb].data[pos] = data;
+    if (block_write_byte(rb, pos, data) == -1) {
+        printf("Error writing byte to block\n");
+        return;
+    }
 
     if (opos >= inodes[fd].size) {
         inodes[fd].size = opos + 1;
@@ -214,7 +214,7 @@ int allocate_file(int size, const char* name) {
     }
     inodes[inode].size = size;
     inodes[inode].next = curr_block;
-    disk_blocks[curr_block].next = -2;
+    block_set_next(curr_block, BLOCK_END);
     strcpy(inodes[inode].name, name);
     if (size>BLOCK_SIZE) {  // REQUIRES TESTS
         int allocated_size = -(3*BLOCK_SIZE)/4;
@@ -232,19 +232,19 @@ int allocate_file(int size, const char* name) {
             allocated_size+=BLOCK_SIZE;
         }
     }
-    disk_blocks[curr_block].next = -2;
+    block_set_next(curr_block, BLOCK_END);
 
     return inode;
 }
 int block_alloc(void) {
     int block = find_empty_block();
 
-    if (block == -1) {
+    if (block == BLOCK_FREE) {
         errno = 28;
         return -1;
     }
 
-    disk_blocks[block].next = -2;
+    disk_blocks[block].next = BLOCK_END;
     memset(disk_blocks[block].data, 0, BLOCK_SIZE);
 
     return block;
@@ -253,10 +253,10 @@ int block_alloc(void) {
 void block_free_chain(int start_block) {
     int block = start_block;
 
-    while (block != -1 && block != -2) {
+    while (block != BLOCK_FREE && block != BLOCK_END) {
         int next = disk_blocks[block].next;
 
-        disk_blocks[block].next = -1;
+        disk_blocks[block].next = BLOCK_FREE;
         memset(disk_blocks[block].data, 0, BLOCK_SIZE);
 
         block = next;
@@ -300,7 +300,7 @@ void block_set_next(int block_id, int next_block) {
 int find_empty_block() {
     for (size_t i = 0; i < super_block.blocks; i++)
     {
-        if (disk_blocks[i].next == -1) {
+        if (disk_blocks[i].next == BLOCK_FREE){
             return i;
         }
     }
@@ -463,16 +463,29 @@ void printfd(int fd) {
     }
 
     int rb = inodes[fd].next;
+    int bytes_remaining = inodes[fd].size;
+
     printf("NAME: %s\n", inodes[fd].name);
 
-    while (rb != -2) {
-        if (rb == -1) {
-            errno = 131;
+    while (rb != BLOCK_END && bytes_remaining > 0) {
+        if (rb == BLOCK_FREE) {
             printf("Error retrieving file\n");
             return;
         }
 
-        printf("%s", disk_blocks[rb].data);
+        char *data = block_data_ptr(rb);
+        if (data == NULL) {
+            printf("Error reading block data\n");
+            return;
+        }
+
+        int bytes_to_print = bytes_remaining < BLOCK_SIZE ? bytes_remaining : BLOCK_SIZE;
+
+        for (int i = 0; i < bytes_to_print; i++) {
+            putchar(data[i]);
+        }
+
+        bytes_remaining -= bytes_to_print;
         rb = block_next(rb);
     }
 
@@ -547,7 +560,12 @@ struct mydirent *myreaddir(myDIR* dirp) {
         return NULL;
     }
 
-    return (struct mydirent*)disk_blocks[block].data;
+    void *data = block_data_ptr(block);
+    if (data == NULL) {
+        return NULL;
+    }
+
+    return (struct mydirent*)data;
 }
 
 int myclosedir(myDIR* dirp) {
@@ -716,4 +734,42 @@ void extractfilefs(char* fname){
 
     printfd(fd);
     myclose(fd);
+}
+
+int block_read_byte(int block_id, int offset, char *out) {
+    if (block_id < 0 || block_id >= super_block.blocks) {
+        return -1;
+    }
+
+    if (offset < 0 || offset >= BLOCK_SIZE) {
+        return -1;
+    }
+
+    if (out == NULL) {
+        return -1;
+    }
+
+    *out = disk_blocks[block_id].data[offset];
+    return 0;
+}
+
+int block_write_byte(int block_id, int offset, char value) {
+    if (block_id < 0 || block_id >= super_block.blocks) {
+        return -1;
+    }
+
+    if (offset < 0 || offset >= BLOCK_SIZE) {
+        return -1;
+    }
+
+    disk_blocks[block_id].data[offset] = value;
+    return 0;
+}
+
+void *block_data_ptr(int block_id) {
+    if (block_id < 0 || block_id >= super_block.blocks) {
+        return NULL;
+    }
+
+    return disk_blocks[block_id].data;
 }

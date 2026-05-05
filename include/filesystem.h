@@ -14,6 +14,9 @@
 #define MAX_FILES 100
 #define O_CREAT 0100
 
+#define BLOCK_FREE -1
+#define BLOCK_END  -2
+
 struct super_block {
     int inodes;
     int blocks;
@@ -81,4 +84,8 @@ int block_write(int block_id, const char *buffer);
 int block_next(int block_id);
 void block_set_next(int block_id, int next_block);
 void printdir(const char*);
+
+int block_read_byte(int block_id, int offset, char *out);
+int block_write_byte(int block_id, int offset, char value);
+void *block_data_ptr(int block_id);
 #endif
