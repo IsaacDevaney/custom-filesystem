@@ -46,16 +46,12 @@ void formatfs(){
     }
 
     createroot();
-    //TEMP TEST CODE BELOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    mymkdir("/root/", "docs");
-
+    //mymkdir("/root/", "docs");
+    //mycreatefile("docs", "notes.txt");
 }
 
 void mysync(const char* target) {
-    /**
-     * @brief Will load the UFS that is currently on the memory into a file named target.
-     *  The file could be loaded in the future using resync.
-     */
+    
     FILE *file;
     file = fopen(target, "w+");
     fwrite(&super_block, sizeof(struct super_block), 1, file);
@@ -383,6 +379,8 @@ void printfs_dsk(char* target) {
 void lsfs(char* target){
     printdir("/root/");
 }
+
+
 
 void printdir(const char* pathname) {
     myDIR* dirp = myopendir(pathname);
