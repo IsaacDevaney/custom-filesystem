@@ -373,23 +373,44 @@ void lsfs(char* target){
 
 void printdir(const char* pathname) {
     myDIR* dirp = myopendir(pathname);
+
+    if (dirp == NULL) {
+        printf("Error opening directory %s\n", pathname);
+        return;
+    }
+
     int fd = dirp->fd;
-    if (inodes[fd].dir==0) {
+
+    if (fd < 0 || fd >= super_block.inodes || inodes[fd].dir == 0) {
         errno = 20;
-	printf("Error attempting to list contents of file system.\n");
-        return; //-1;
+        printf("Error attempting to list contents of file system.\n");
+        myclosedir(dirp);
+        return;
     }
+
     printf("NAME OF DIRECTORY: %s\n", inodes[fd].name);
-    struct mydirent* currdir = (struct mydirent*)disk_blocks[inodes[fd].next].data;
-    for (size_t i = 0; i < currdir->size; i++)
-    {
-	if (inodes[currdir->fds[i]].dir == 0){
-          printf("\tfile number %ld: %s \n",i, inodes[currdir->fds[i]].name);
-	}
-	else {
-	  printf("NAME OF DIRECTORY: %s\n", inodes[currdir->fds[i]].name);
-	}
+
+    struct mydirent* currdir = myreaddir(dirp);
+    if (currdir == NULL) {
+        printf("Error reading directory %s\n", pathname);
+        myclosedir(dirp);
+        return;
     }
+
+    for (size_t i = 0; i < currdir->size; i++) {
+        int child_fd = currdir->fds[i];
+
+        if (child_fd < 0 || child_fd >= super_block.inodes) {
+            continue;
+        }
+
+        if (inodes[child_fd].dir == 0) {
+            printf("\tfile number %ld: %s \n", i, inodes[child_fd].name);
+        } else {
+            printf("NAME OF DIRECTORY: %s\n", inodes[child_fd].name);
+        }
+    }
+
     myclosedir(dirp);
     printf("\nDONE\n");
 }
@@ -435,28 +456,26 @@ int mycreatefile(const char *path, const char* name)
     return newfd;
 }
 
-void printfd(int fd){
-
-  /*  if(openfiles[fd].fd == -1)
-    {
-        errno = 13;
-        return -1;
+void printfd(int fd) {
+    if (fd < 0 || fd >= super_block.inodes) {
+        printf("Invalid file descriptor\n");
+        return;
     }
-    */
+
     int rb = inodes[fd].next;
     printf("NAME: %s\n", inodes[fd].name);
 
-    while(rb!=-2) {
-        if (rb==-1) {
+    while (rb != -2) {
+        if (rb == -1) {
             errno = 131;
-	    printf("Error retrieving file\n");
-            return;// -1;
+            printf("Error retrieving file\n");
+            return;
         }
+
         printf("%s", disk_blocks[rb].data);
-
-        rb = disk_blocks[rb].next;
-
+        rb = block_next(rb);
     }
+
     printf("\nDONE %s\n", inodes[fd].name);
 }
 
@@ -506,16 +525,29 @@ myDIR* myopendir(const char *pathname) {
 }
 
 struct mydirent *myreaddir(myDIR* dirp) {
-    /**
-     * @brief Uses @param dirp to find the asked directory using fd, and @return it as a @struct mydirent.
-     */
-    int fd = dirp->fd;
-    if (inodes[fd].dir!=1) {
-        errno = 20;
-	printf("Error attempting to read directory\n");
-        return NULL;//-1;
+    if (dirp == NULL) {
+        return NULL;
     }
-    return (struct mydirent*)disk_blocks[inodes[fd].next].data;
+
+    int fd = dirp->fd;
+
+    if (fd < 0 || fd >= super_block.inodes) {
+        return NULL;
+    }
+
+    if (inodes[fd].dir != 1) {
+        errno = 20;
+        printf("Error attempting to read directory\n");
+        return NULL;
+    }
+
+    int block = inodes[fd].next;
+
+    if (block < 0 || block >= super_block.blocks) {
+        return NULL;
+    }
+
+    return (struct mydirent*)disk_blocks[block].data;
 }
 
 int myclosedir(myDIR* dirp) {
