@@ -388,6 +388,7 @@ void printdir(const char* pathname) {
         printf("Error opening directory %s\n", pathname);
         return;
     }
+   // int parent_fd = dirp->fd;
 
     int fd = dirp->fd;
 
@@ -436,17 +437,14 @@ int mycreatefile(const char *path, const char* name)
     }
 
     printf("Path is %s\n", fin);
-    int newfd = allocate_file(1, name);
 
-    if (newfd == -1) {
-        printf("Error creating file %s\n", name);
-        return -1;
-    }
     myDIR* dirp = myopendir(fin);
     if (dirp == NULL) {
         printf("Error opening directory %s\n", fin);
         return -1;
     }
+
+    int parent_fd = dirp->fd;
 
     struct mydirent *currdir = myreaddir(dirp);
     if (currdir == NULL) {
@@ -461,7 +459,17 @@ int mycreatefile(const char *path, const char* name)
         return -1;
     }
 
+    int newfd = allocate_file(1, name);
+    if (newfd == -1) {
+        printf("Error creating file %s\n", name);
+        myclosedir(dirp);
+        return -1;
+    }
+
+    inodes[newfd].parent_inode = parent_fd;
+
     currdir->fds[currdir->size++] = newfd;
+
     myclosedir(dirp);
     return newfd;
 }
