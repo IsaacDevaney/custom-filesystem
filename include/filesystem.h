@@ -13,6 +13,8 @@
 #define MAX_DIR_SIZE 10
 #define MAX_FILES 100
 #define O_CREAT 0100
+#define MAX_FILE_BLOCKS 64
+#define MAX_FILE_SIZE   (MAX_FILE_BLOCKS * BLOCK_SIZE)
 
 #define BLOCK_FREE -1
 #define BLOCK_END  -2

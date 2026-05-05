@@ -144,6 +144,11 @@ int myclose(int myfd) {
 }
 
 void writebyte(int fd, int opos, char data) {
+    if (opos >= MAX_FILE_SIZE) {
+        printf("Error: write exceeds max file size\n");
+        return;
+    }
+
     if (fd < 0 || fd >= super_block.inodes) {
         printf("Invalid file descriptor\n");
         return;
@@ -197,11 +202,14 @@ void writebyte(int fd, int opos, char data) {
 }
 
 int allocate_file(int size, const char* name) {
-    /**
-     * @brief This function will allocate new inode and enough blocks for a new file.
-     * (One inode is allocated, the amount of needed blocks is calculated)
-     *
+    /*
+      (One inode is allocated, the amount of needed blocks is calculated)
      */
+    if (size > MAX_FILE_SIZE) {
+        errno = 27; // EFBIG
+        return -1;
+    }
+
     if (strlen(name) >= NAME_SIZE) {
         errno = 36;
         return -1;
@@ -674,6 +682,12 @@ void addfilefs(char* fname, char* target_dir) {
     int pos = 0;
     int ch;
     while ((ch = fgetc(src)) != EOF) {
+        if (pos >= MAX_FILE_SIZE) {
+            printf("Error: file exceeds max size (%d bytes)\n", MAX_FILE_SIZE);
+            fclose(src);
+            free(basec);
+            return;
+        }
         writebyte(fd, pos++, (char)ch);
     }
 
