@@ -144,32 +144,53 @@ int myclose(int myfd) {
 }
 
 void writebyte(int fd, int opos, char data) {
-    /**
-     * @brief Write a SINGLE byte into a disk block.
-     * The function calculates the correct relevant block (rb) that is needed to be accessed.
-     * if the position that is needed to be wrriten is out of the bounds of the file,
-     * allocate a new disk block for it.
-     */
+    if (fd < 0 || fd >= super_block.inodes) {
+        printf("Invalid file descriptor\n");
+        return;
+    }
+
     int pos = opos;
     int rb = inodes[fd].next;
-    while (pos>=BLOCK_SIZE) {
-        pos-=BLOCK_SIZE;
-        if (disk_blocks[rb].next==-1) {
-            errno = 131;
-	    printf("Error writing to disk. Error %d\n", errno);
-            return;// -1;
-        } else if (disk_blocks[rb].next == -2) { // the current block is the last block, so we allocate a new block
-            disk_blocks[rb].next = find_empty_block();
-            rb = disk_blocks[rb].next;
-            disk_blocks[rb].next = -2;
+
+    if (rb == -1) {
+        rb = block_alloc();
+        if (rb == -1) {
+            printf("Error allocating first block\n");
+            return;
+        }
+
+        inodes[fd].next = rb;
+    }
+
+    while (pos >= BLOCK_SIZE) {
+        pos -= BLOCK_SIZE;
+
+        int next = block_next(rb);
+
+        if (next == -1) {
+            printf("Error writing to freed block\n");
+            return;
+        }
+
+        if (next == -2) {
+            int new_block = block_alloc();
+            if (new_block == -1) {
+                printf("Error allocating new block\n");
+                return;
+            }
+
+            block_set_next(rb, new_block);
+            rb = new_block;
         } else {
-            rb = disk_blocks[rb].next;
+            rb = next;
         }
     }
-    if (opos >= inodes[fd].size) {
-        inodes[fd].size = opos+1;
-    }
+
     disk_blocks[rb].data[pos] = data;
+
+    if (opos >= inodes[fd].size) {
+        inodes[fd].size = opos + 1;
+    }
 }
 
 int allocate_file(int size, const char* name) {
