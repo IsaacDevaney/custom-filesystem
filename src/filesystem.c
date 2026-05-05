@@ -297,16 +297,18 @@ void block_set_next(int block_id, int next_block) {
     disk_blocks[block_id].next = next_block;
 }
 
-int find_empty_block() {
-    for (size_t i = 0; i < super_block.blocks; i++)
-    {
-        if (disk_blocks[i].next == BLOCK_FREE){
+/*
+ Deterministic first-fit allocation:
+ */
+int find_empty_block(void) {
+    for (int i = 0; i < super_block.blocks; i++) {
+        if (disk_blocks[i].next == BLOCK_FREE) {
             return i;
         }
     }
-    return -1;
-}
 
+    return BLOCK_FREE;
+}
 int find_empty_inode() {
     for (size_t i = 0; i < super_block.inodes; i++)
     {
