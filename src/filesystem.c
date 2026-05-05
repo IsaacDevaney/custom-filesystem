@@ -30,11 +30,13 @@ void formatfs(){
    inodes = malloc(super_block.inodes*sizeof(struct inode));
    disk_blocks = malloc(super_block.blocks*sizeof(struct disk_block));
 
-   for (size_t i = 0; i < super_block.inodes; i++)
+    for (size_t i = 0; i < super_block.inodes; i++)
     {
         strcpy(inodes[i].name, "");
-        inodes[i].next = -1;
-        inodes[i].dir = 0;
+        inodes[i].first_block = BLOCK_FREE;
+        inodes[i].size = 0;
+        inodes[i].is_directory = 0;
+        inodes[i].parent_inode = -1;
     }
 
     for (size_t i = 0; i < super_block.blocks; i++)
@@ -68,7 +70,7 @@ void createroot() {
 	printf("Error formatting file. Error: %d\n", errno);
         return;// -1;
     }
-    inodes[zerofd].dir = 1;
+    inodes[zerofd].is_directory = 1;
     struct mydirent* rootdir = malloc(sizeof(struct mydirent));
     for (size_t i = 0; i < MAX_DIR_SIZE; i++)
     {
@@ -82,6 +84,8 @@ void createroot() {
         writebyte(zerofd, i, rootdiraschar[i]);
     }
     free(rootdir);
+    inodes[zerofd].is_directory = 1;
+    inodes[zerofd].parent_inode = -1;
 }
 
 int myopen(const char *pathname, int flags)
@@ -104,7 +108,7 @@ int myopen(const char *pathname, int flags)
 
     for (size_t i = 0; i < super_block.inodes; i++) {
         if (!strcmp(inodes[i].name, currpath)) {
-            if (inodes[i].dir != 0) {
+            if (inodes[i].is_directory != 0) {
                 errno = 21;
                 return -1;
             }
@@ -147,7 +151,7 @@ void writebyte(int fd, int opos, char data) {
     }
 
     int pos = opos;
-    int rb = inodes[fd].next;
+    int rb = inodes[fd].first_block;
 
    if (rb == BLOCK_FREE)  {
         rb = block_alloc();
@@ -156,7 +160,7 @@ void writebyte(int fd, int opos, char data) {
             return;
         }
 
-        inodes[fd].next = rb;
+        inodes[fd].first_block = rb;
     }
 
     while (pos >= BLOCK_SIZE) {
@@ -213,7 +217,7 @@ int allocate_file(int size, const char* name) {
         return -1;
     }
     inodes[inode].size = size;
-    inodes[inode].next = curr_block;
+    inodes[inode].first_block = curr_block;
     block_set_next(curr_block, BLOCK_END);
     strcpy(inodes[inode].name, name);
     if (size>BLOCK_SIZE) {  // REQUIRES TESTS
@@ -298,7 +302,9 @@ void block_set_next(int block_id, int next_block) {
 }
 
 /*
- Deterministic first-fit allocation:
+ * Deterministic first-fit allocation:
+ * scans from the beginning of the block table and returns
+ * the lowest-numbered free block.
  */
 int find_empty_block(void) {
     for (int i = 0; i < super_block.blocks; i++) {
@@ -312,7 +318,7 @@ int find_empty_block(void) {
 int find_empty_inode() {
     for (size_t i = 0; i < super_block.inodes; i++)
     {
-        if (inodes[i].next == -1) {
+        if (inodes[i].first_block == -1) {
             return i;
         }
 
@@ -354,7 +360,7 @@ void printfs_dsk(char* target) {
     printf("\nINODES\n");
     for (size_t i = 0; i < temp_super_block.inodes; i++)
     {
-        printf("%ld.\t name: %s | isdir: %d | next: %d\n",i , temp_inodes[i].name, temp_inodes[i].dir ,temp_inodes[i].next);
+        printf("%ld.\t name: %s | isdir: %d | next: %d\n",i , temp_inodes[i].name, temp_inodes[i].is_directory ,temp_inodes[i].first_block);
     }
 
     printf("\nBLOCKS\n");
@@ -383,7 +389,7 @@ void printdir(const char* pathname) {
 
     int fd = dirp->fd;
 
-    if (fd < 0 || fd >= super_block.inodes || inodes[fd].dir == 0) {
+    if (fd < 0 || fd >= super_block.inodes || inodes[fd].is_directory == 0) {
         errno = 20;
         printf("Error attempting to list contents of file system.\n");
         myclosedir(dirp);
@@ -406,7 +412,7 @@ void printdir(const char* pathname) {
             continue;
         }
 
-        if (inodes[child_fd].dir == 0) {
+        if (inodes[child_fd].is_directory == 0) {
             printf("\tfile number %ld: %s \n", i, inodes[child_fd].name);
         } else {
             printf("NAME OF DIRECTORY: %s\n", inodes[child_fd].name);
@@ -464,7 +470,7 @@ void printfd(int fd) {
         return;
     }
 
-    int rb = inodes[fd].next;
+    int rb = inodes[fd].first_block;
     int bytes_remaining = inodes[fd].size;
 
     printf("NAME: %s\n", inodes[fd].name);
@@ -524,7 +530,7 @@ myDIR* myopendir(const char *pathname) {
     for (size_t i = 0; i < super_block.inodes; i++)
     {
         if (!strcmp(inodes[i].name, currpath)) {
-            if (inodes[i].dir!=1) {
+            if (inodes[i].is_directory!=1) {
                 errno = 20;
 		printf("Error attempting to open directory.\n");
                 return NULL;//-1;
@@ -550,13 +556,13 @@ struct mydirent *myreaddir(myDIR* dirp) {
         return NULL;
     }
 
-    if (inodes[fd].dir != 1) {
+    if (inodes[fd].is_directory != 1) {
         errno = 20;
         printf("Error attempting to read directory\n");
         return NULL;
     }
 
-    int block = inodes[fd].next;
+    int block = inodes[fd].first_block;
 
     if (block < 0 || block >= super_block.blocks) {
         return NULL;
@@ -592,11 +598,11 @@ int mymkdir(const char *path, const char* name) {
         errno = 2;
         return -1;
     }
-    if (inodes[fd].dir!=1) {
+    if (inodes[fd].is_directory!=1) {
         errno = 20;
         return -1;
     }
-    int dirblock = inodes[fd].next;
+    int dirblock = inodes[fd].first_block;
     struct mydirent* currdir = (struct mydirent*)disk_blocks[dirblock].data;
     if (currdir->size>=MAX_DIR_SIZE) {
         errno = 31;
@@ -604,7 +610,7 @@ int mymkdir(const char *path, const char* name) {
     }
     int newdirfd = allocate_file(sizeof(struct mydirent), name);
     currdir->fds[currdir->size++] = newdirfd;
-    inodes[newdirfd].dir = 1;
+    inodes[newdirfd].is_directory = 1;
     struct mydirent* newdir = malloc(sizeof(struct mydirent));
     newdir->size = 0;
     for (size_t i = 0; i < MAX_DIR_SIZE; i++)
@@ -716,10 +722,10 @@ void removefilefs(char* fname) {
         return;
     }
 
-    block_free_chain(inodes[file_fd].next);
-    inodes[file_fd].next = -1;
+    block_free_chain(inodes[file_fd].first_block);
+    inodes[file_fd].first_block = -1;
     inodes[file_fd].size = 0;
-    inodes[file_fd].dir = 0;
+    inodes[file_fd].is_directory = 0;
     strcpy(inodes[file_fd].name, "");
 
     myclosedir(dirp);

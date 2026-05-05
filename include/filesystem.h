@@ -28,10 +28,11 @@ struct disk_block {
 };
 
 struct inode {
-    int next;
-    char name[NAME_SIZE];
-    int dir; // 0 for file 1 for dir
+    int first_block;
     int size;
+    int is_directory;
+    int parent_inode;
+    char name[NAME_SIZE];
 };
 
 struct mydirent {
